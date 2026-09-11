@@ -9,34 +9,27 @@
         input, textarea { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
         button { background: #0066cc; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
         button:hover { background: #004c99; }
-        .post { background: white; padding: 15px 15px 45px 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative; }
-        .post-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9em; color: #555; }
+        .post { background: white; padding: 15px 15px 35px 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative; }
+        .post-header { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.9em; color: #555; }
         .post-author { font-weight: bold; color: #333; }
         
-        /* 투명 테두리 박스 (내용만 담는 용도) */
+        /* 1. 줄바꿈 및 띄어쓰기 유지 + 3줄 초과 시 말줄임 처리 */
         .post-content {
             white-space: pre-wrap;
             word-break: break-all;
-            font-family: monospace;
-            font-size: 0.95em;
-            color: #222;
-            padding: 10px;
-            border: 1px solid #eaecef;
-            border-radius: 6px;
-            background: transparent;
-            
             display: -webkit-box;
-            -webkit-line-clamp: 7; /* 7줄 넘어가면 숨김 */
+            -webkit-line-clamp: 3;
             -webkit-box-orient: vertical;
             overflow: hidden;
             text-overflow: ellipsis;
+            margin-bottom: 5px;
         }
-        
+        /* 펼쳐졌을 때 */
         .post-content.expanded {
             -webkit-line-clamp: unset;
         }
 
-        /* 투명 박스 바깥 하단에 위치하는 자세히 보기 버튼 */
+        /* 자세히 보기 / 접기 버튼 스타일 */
         .toggle-btn {
             background: none;
             border: none;
@@ -45,14 +38,13 @@
             padding: 0;
             font-size: 0.85em;
             font-weight: bold;
-            margin-top: 8px;
-            display: none; /* 기본 숨김, JS로 조건 맞을 때만 표시 */
+            margin-bottom: 8px;
         }
         .toggle-btn:hover { text-decoration: underline; }
 
         .post-file { margin-top: 8px; font-size: 0.9em; }
         
-        /* 우측 하단 작은 x 삭제 버튼 */
+        /* 우측 하단 작은 x 삭제 버튼 스타일 */
         .delete-btn {
             position: absolute;
             bottom: 10px;
@@ -88,18 +80,20 @@
                 <span style="font-size: 0.8em; color: #888;">{{ post.time }}</span>
             </div>
             
-            <!-- 투명 박스 내부 (내용만 들어감) -->
-            <div class="post-content" id="content-{{ post.id }}" data-text="{{ post.content }}">{{ post.content }}</div>
+            <!-- 게시글 내용 -->
+            <div class="post-content" id="content-{{ post.id }}">{{ post.content }}</div>
             
-            <!-- 투명 박스 바깥 아래에 위치하는 자세히 보기 버튼 -->
-            <button class="toggle-btn" id="btn-{{ post.id }}" onclick="toggleContent('{{ post.id }}')">자세히 보기 ∨</button>
+            <!-- 자바스크립트로 제어되는 자세히 보기 버튼 (글이 길 때만 나타나게 하거나 기본 배치) -->
+            <button class="toggle-btn" id="btn-{{ post.id }}" onclick="toggleContent('{{ post.id }}')" style="display: none;">자세히 보기</button>
 
+            <!-- Supabase 퍼블릭 URL을 활용한 다운로드 링크 -->
             {% if post.filename %}
                 <div class="post-file">
                     📎 파일: <a href="{{ post.file_url }}" download="{{ post.filename }}">{{ post.filename }}</a>
                 </div>
             {% endif %}
 
+            <!-- 각 게시글별 독립된 삭제 폼과 x 버튼 -->
             <form id="delete-form-{{ post.id }}" action="{{ url_for('delete_post', post_id=post.id) }}" method="POST" style="display: none;">
                 <input type="hidden" name="password" id="password-input-{{ post.id }}">
             </form>
@@ -110,17 +104,14 @@
     {% endfor %}
 
     <script>
-        // 7줄 이상이거나 글자 수가 길 때 투명 박스 바깥 아래에 버튼 표시
+        // 페이지가 로드될 때, 글 내용이 실제로 3줄을 넘는 경우에만 '자세히 보기' 버튼을 보여줌
         window.addEventListener('DOMContentLoaded', () => {
             {% for post in posts %}
                 const el = document.getElementById('content-{{ post.id }}');
                 const btn = document.getElementById('btn-{{ post.id }}');
                 if (el && btn) {
-                    const text = el.getAttribute('data-text') || "";
-                    const lines = text.split('\n').length;
-                    
-                    // 엔터가 6번 이상이거나(7줄 이상) 글자 수가 200자 이상일 때 확실하게 버튼 노출
-                    if (lines >= 6 || text.length > 200) {
+                    // scrollHeight가 clientHeight보다 크면 내용이 넘친(줄바꿈된) 것
+                    if (el.scrollHeight > el.clientHeight) {
                         btn.style.display = 'inline-block';
                     }
                 }
@@ -134,9 +125,9 @@
             content.classList.toggle('expanded');
             
             if (content.classList.contains('expanded')) {
-                btn.innerText = '접기 ∧';
+                btn.innerText = '접기';
             } else {
-                btn.innerText = '자세히 보기 ∨';
+                btn.innerText = '자세히 보기';
             }
         }
 
