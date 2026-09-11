@@ -1,161 +1,145 @@
 <!DOCTYPE html>
-
 <html lang="ko">
-
 <head>
-
     <meta charset="UTF-8">
-
     <title>과제 공유 게시판</title>
-
     <style>
-
         body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #f4f6f8; }
-
         .box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
-
         input, textarea { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
-
         button { background: #0066cc; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-
         button:hover { background: #004c99; }
-
-        .post { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative; }
-
+        .post { background: white; padding: 15px 15px 40px 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative; }
         .post-header { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.9em; color: #555; }
-
         .post-author { font-weight: bold; color: #333; }
-
         .post-file { margin-top: 8px; font-size: 0.9em; }
 
-        /* 우측 하단 작은 x 삭제 버튼 스타일 */
-
-        .delete-btn {
-
-            position: absolute;
-
-            bottom: 10px;
-
-            right: 15px;
-
-            background: none;
-
-            border: none;
-
-            color: #ccc;
-
-            font-size: 14px;
-
-            cursor: pointer;
-
-            padding: 0;
-
+        /* [추가된 기능] 7줄 이상일 때 숨김 및 줄바꿈/코드 유지 스타일 */
+        .post-content {
+            white-space: pre-wrap;
+            word-break: break-all;
+            margin: 0 0 8px 0;
+            display: -webkit-box;
+            -webkit-line-clamp: 7; /* 7줄까지만 표시 */
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .post-content.expanded {
+            -webkit-line-clamp: unset;
         }
 
+        /* [추가된 기능] 본문 바로 아래 바깥쪽에 뜨는 자세히 보기 버튼 스타일 */
+        .toggle-btn {
+            background: none;
+            border: none;
+            color: #0066cc;
+            cursor: pointer;
+            padding: 0;
+            font-size: 0.85em;
+            font-weight: bold;
+            display: none; /* 기본 숨김, JS로 조건 맞을 때만 노출 */
+        }
+        .toggle-btn:hover { text-decoration: underline; }
+
+        /* 우측 하단 작은 x 삭제 버튼 스타일 */
+        .delete-btn {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            background: none;
+            border: none;
+            color: #ccc;
+            font-size: 14px;
+            cursor: pointer;
+            padding: 0;
+        }
         .delete-btn:hover { color: #ff4d4d; }
-
     </style>
-
 </head>
-
 <body>
-
-
 
     <h1>과제 공유 게시판</h1>
 
-
-
     <div class="box">
-
         <form method="POST" enctype="multipart/form-data">
-
             <input type="text" name="author" placeholder="이름" required>
-
             <textarea name="content" rows="3" placeholder="내용을 입력하세요"></textarea>
-
             <input type="file" name="file">
-
             <button type="submit">올리기</button>
-
         </form>
-
     </div>
 
-
-
     <h2>제출된 목록</h2>
-
     {% for post in posts %}
-
         <div class="post">
-
             <div class="post-header">
-
                 <span class="post-author">{{ post.author }}</span>
-
                 <span style="font-size: 0.8em; color: #888;">{{ post.time }}</span>
-
             </div>
-
-            <p>{{ post.content }}</p>
-
             
-
+            <!-- 본문 영역 (클래스 추가 및 data-text 속성 부여) -->
+            <div class="post-content" id="content-{{ post.id }}" data-text="{{ post.content }}">{{ post.content }}</div>
+            
+            <!-- 본문 바로 아래 바깥쪽에 위치하는 자세히 보기 버튼 -->
+            <button class="toggle-btn" id="btn-{{ post.id }}" onclick="toggleContent('{{ post.id }}')">자세히 보기 ∨</button>
+            
             <!-- Supabase 퍼블릭 URL을 활용한 다운로드 링크 -->
-
             {% if post.filename %}
-
                 <div class="post-file">
-
                     📎 파일: <a href="{{ post.file_url }}" download="{{ post.filename }}">{{ post.filename }}</a>
-
                 </div>
-
             {% endif %}
 
-
-
             <!-- 각 게시글별 독립된 삭제 폼과 x 버튼 -->
-
             <form id="delete-form-{{ post.id }}" action="{{ url_for('delete_post', post_id=post.id) }}" method="POST" style="display: none;">
-
                 <input type="hidden" name="password" id="password-input-{{ post.id }}">
-
             </form>
-
             <button class="delete-btn" onclick="askPassword('{{ post.id }}')">x</button>
-
         </div>
-
     {% else %}
-
         <p style="color: #777;">아직 올라온 과제가 없습니다.</p>
-
     {% endfor %}
 
-
-
     <script>
+        // 페이지가 열릴 때 7줄이 넘어가거나 글이 긴 경우에만 버튼을 확실하게 띄워줌
+        window.addEventListener('DOMContentLoaded', () => {
+            {% for post in posts %}
+                const el = document.getElementById('content-{{ post.id }}');
+                const btn = document.getElementById('btn-{{ post.id }}');
+                if (el && btn) {
+                    const text = el.getAttribute('data-text') || "";
+                    const lines = text.split('\n').length;
+                    
+                    // 줄바꿈이 6개 이상이거나 글자 수가 200자 이상이면 버튼 표시
+                    if (lines >= 6 || text.length > 200) {
+                        btn.style.display = 'inline-block';
+                    }
+                }
+            {% endfor %}
+        });
 
-        function askPassword(postId) {
-
-            let pwd = prompt("암호");
-
-            if (pwd !== null && pwd !== "") {
-
-                document.getElementById('password-input-' + postId).value = pwd;
-
-                document.getElementById('delete-form-' + postId).submit();
-
+        function toggleContent(postId) {
+            const content = document.getElementById('content-' + postId);
+            const btn = document.getElementById('btn-' + postId);
+            
+            content.classList.toggle('expanded');
+            
+            if (content.classList.contains('expanded')) {
+                btn.innerText = '접기 ∧';
+            } else {
+                btn.innerText = '자세히 보기 ∨';
             }
-
         }
 
+        function askPassword(postId) {
+            let pwd = prompt("암호");
+            if (pwd !== null && pwd !== "") {
+                document.getElementById('password-input-' + postId).value = pwd;
+                document.getElementById('delete-form-' + postId).submit();
+            }
+        }
     </script>
 
-
-
 </body>
-
 </html>
