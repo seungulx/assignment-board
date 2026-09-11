@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>과제 공유 게시판</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #f4f6f8; }
+        .box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        input, textarea { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #0066cc; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #004c99; }
+        .post { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .post-header { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.9em; color: #555; }
+        .post-author { font-weight: bold; color: #333; }
+        .post-file { margin-top: 8px; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+
+    <h1>과제 공유 게시판</h1>
+
+    <div class="box">
+        <form method="POST" enctype="multipart/form-data">
+            <input type="text" name="author" placeholder="이름" required>
+            <textarea name="content" rows="3" placeholder="내용을 입력하세요"></textarea>
+            <input type="file" name="file">
+            <button type="submit">올리기</button>
+        </form>
+    </div>
+
+    <h2>제출된 목록</h2>
+    {% for post in posts %}
+        <div class="post">
+            <div class="post-header">
+                <span class="post-author">{{ post.author }}</span>
+                <span style="font-size: 0.8em; color: #888;">{{ post.time }}</span>
+            </div>
+            <p>{{ post.content }}</p>
+            {% if post.filename %}
+                <div class="post-file">
+                    📎 파일: <a href="{{ url_for('downloaded_file', filename=post.filename) }}" download>{{ post.filename }}</a>
+                </div>
+            {% endif %}
+        </div>
+    {% else %}
+        <p style="color: #777;">아직 올라온 과제가 없습니다.</p>
+    {% endfor %}
+
+</body>
+</html>
