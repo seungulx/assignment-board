@@ -54,30 +54,23 @@
                     📎 파일: <a href="{{ url_for('downloaded_file', filename=post.filename) }}" download>{{ post.filename }}</a>
                 </div>
             {% endif %}
-            
-            <!-- 우측 하단 작은 x 버튼 -->
-            <button class="delete-btn" onclick="deletePost('{{ post.id }}')">x</button>
+
+            <!-- 각 게시글별 독립된 삭제 폼과 x 버튼 -->
+            <form id="delete-form-{{ post.id }}" action="{{ url_for('delete_post', post_id=post.id) }}" method="POST" style="display: none;">
+                <input type="hidden" name="password" id="password-input-{{ post.id }}">
+            </form>
+            <button class="delete-btn" onclick="askPassword('{{ post.id }}')">x</button>
         </div>
     {% else %}
         <p style="color: #777;">아직 올라온 과제가 없습니다.</p>
     {% endfor %}
 
     <script>
-        function deletePost(postId) {
-            let pwd = prompt("암호:");
+        function askPassword(postId) {
+            let pwd = prompt("암호");
             if (pwd !== null && pwd !== "") {
-                let form = document.createElement('form');
-                form.method = 'POST';
-                form.action = '/delete/' + postId;
-                
-                let input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = 'password';
-                input.value = pwd;
-                
-                form.appendChild(input);
-                document.body.appendChild(form);
-                form.submit();
+                document.getElementById('password-input-' + postId).value = pwd;
+                document.getElementById('delete-form-' + postId).submit();
             }
         }
     </script>
