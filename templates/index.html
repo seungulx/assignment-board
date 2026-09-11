@@ -13,20 +13,20 @@
         .post-header { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.9em; color: #555; }
         .post-author { font-weight: bold; color: #333; }
         
-        /* 1. 줄바꿈 및 띄어쓰기 유지 + 3줄 초과 시 말줄임 처리 */
+        /* 줄바꿈 유지 및 7줄 초과 시 숨김 처리 */
         .post-content {
             white-space: pre-wrap;
             word-break: break-all;
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
+            max-height: 10.5em; /* 대략 7줄 높이 제한 (1줄당 약 1.5em 기준) */
             overflow: hidden;
-            text-overflow: ellipsis;
+            position: relative;
             margin-bottom: 5px;
+            transition: max-height 0.3s ease;
         }
-        /* 펼쳐졌을 때 */
+        
+        /* 펼쳐졌을 때 높이 제한 해제 */
         .post-content.expanded {
-            -webkit-line-clamp: unset;
+            max-height: none;
         }
 
         /* 자세히 보기 / 접기 버튼 스타일 */
@@ -39,6 +39,7 @@
             font-size: 0.85em;
             font-weight: bold;
             margin-bottom: 8px;
+            display: none; /* 기본 숨김, 자바스크립트로 조건 만족 시 노출 */
         }
         .toggle-btn:hover { text-decoration: underline; }
 
@@ -83,8 +84,8 @@
             <!-- 게시글 내용 -->
             <div class="post-content" id="content-{{ post.id }}">{{ post.content }}</div>
             
-            <!-- 자바스크립트로 제어되는 자세히 보기 버튼 (글이 길 때만 나타나게 하거나 기본 배치) -->
-            <button class="toggle-btn" id="btn-{{ post.id }}" onclick="toggleContent('{{ post.id }}')" style="display: none;">자세히 보기</button>
+            <!-- 자세히 보기 / 접기 버튼 -->
+            <button class="toggle-btn" id="btn-{{ post.id }}" onclick="toggleContent('{{ post.id }}')">자세히 보기</button>
 
             <!-- Supabase 퍼블릭 URL을 활용한 다운로드 링크 -->
             {% if post.filename %}
@@ -104,14 +105,14 @@
     {% endfor %}
 
     <script>
-        // 페이지가 로드될 때, 글 내용이 실제로 3줄을 넘는 경우에만 '자세히 보기' 버튼을 보여줌
+        // 페이지 로드 시 내용의 실제 높이가 제한 높이보다 클 때만 버튼을 보여줌
         window.addEventListener('DOMContentLoaded', () => {
             {% for post in posts %}
                 const el = document.getElementById('content-{{ post.id }}');
                 const btn = document.getElementById('btn-{{ post.id }}');
                 if (el && btn) {
-                    // scrollHeight가 clientHeight보다 크면 내용이 넘친(줄바꿈된) 것
-                    if (el.scrollHeight > el.clientHeight) {
+                    // 글 내용의 전체 높이가 7줄 높이(약 140px 이상)보다 크면 버튼 표시
+                    if (el.scrollHeight > 130) {
                         btn.style.display = 'inline-block';
                     }
                 }
