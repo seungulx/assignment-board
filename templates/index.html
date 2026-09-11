@@ -9,14 +9,23 @@
         input, textarea { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
         button { background: #0066cc; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
         button:hover { background: #004c99; }
-        .post { background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .post { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative; }
         .post-header { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.9em; color: #555; }
         .post-author { font-weight: bold; color: #333; }
         .post-file { margin-top: 8px; font-size: 0.9em; }
-        .delete-box { margin-top: 10px; padding-top: 8px; border-top: 1px solid #eee; display: flex; gap: 5px; align-items: center; }
-        .delete-box input { width: 120px; margin-bottom: 0; padding: 5px; font-size: 0.85em; }
-        .delete-box button { background: #cc3333; padding: 5px 10px; font-size: 0.85em; }
-        .delete-box button:hover { background: #990000; }
+        /* 우측 하단 작은 x 삭제 버튼 스타일 */
+        .delete-btn {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            background: none;
+            border: none;
+            color: #ccc;
+            font-size: 14px;
+            cursor: pointer;
+            padding: 0;
+        }
+        .delete-btn:hover { color: #ff4d4d; }
     </style>
 </head>
 <body>
@@ -46,17 +55,32 @@
                 </div>
             {% endif %}
             
-            <!-- 관리자 암호 입력 후 삭제하는 영역 (기본 암호: 1234) -->
-            <div class="delete-box">
-                <form action="{{ url_for('delete_post', post_id=post.id) }}" method="POST" style="display: flex; gap: 5px; width: 100%; margin: 0;">
-                    <input type="password" name="admin_password" placeholder="관리자 암호" required>
-                    <button type="submit">삭제</button>
-                </form>
-            </div>
+            <!-- 우측 하단 작은 x 버튼 -->
+            <button class="delete-btn" onclick="deletePost('{{ post.id }}')">x</button>
         </div>
     {% else %}
         <p style="color: #777;">아직 올라온 과제가 없습니다.</p>
     {% endfor %}
+
+    <script>
+        function deletePost(postId) {
+            let pwd = prompt("관리자 암호를 입력하세요:");
+            if (pwd !== null && pwd !== "") {
+                let form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/delete/' + postId;
+                
+                let input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'password';
+                input.value = pwd;
+                
+                form.appendChild(input);
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+    </script>
 
 </body>
 </html>
