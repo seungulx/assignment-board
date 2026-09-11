@@ -13,28 +13,32 @@
         .post-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9em; color: #555; }
         .post-author { font-weight: bold; color: #333; }
         
-        /* 박스 없이 순수 텍스트 형태, 7줄(7 * 1.5em) 넘어가면 숨김 및 말줄임 */
+        /* 투명 테두리 박스 스타일 및 7줄 초과 시 숨김 처리 */
         .post-content {
             white-space: pre-wrap;
             word-break: break-all;
             font-family: monospace;
             font-size: 0.95em;
             color: #222;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
+            padding: 10px;
+            border: 1px solid #eaecef; /* 은은한 투명 테두리 */
+            border-radius: 6px;
+            background: transparent; /* 배경은 투명 */
             
             display: -webkit-box;
-            -webkit-line-clamp: 7; /* 7줄까지만 표시 */
+            -webkit-line-clamp: 7; /* 7줄 넘어가면 숨김 */
             -webkit-box-orient: vertical;
             overflow: hidden;
             text-overflow: ellipsis;
         }
         
-        /* 펼쳐졌을 때 줄 수 제한 해제 */
+        /* 펼쳐졌을 때 */
         .post-content.expanded {
             -webkit-line-clamp: unset;
         }
 
-        /* 자세히 보기 / 접기 버튼 (기본은 숨김, CSS로 제어) */
+        /* 자세히 보기 / 접기 버튼 (기본 숨김) */
         .toggle-btn {
             background: none;
             border: none;
@@ -44,7 +48,7 @@
             font-size: 0.85em;
             font-weight: bold;
             margin-bottom: 8px;
-            display: none; /* 자바스크립트로 7줄 이상일 때만 켜줌 */
+            display: none; 
         }
         .toggle-btn:hover { text-decoration: underline; }
 
@@ -86,7 +90,7 @@
                 <span style="font-size: 0.8em; color: #888;">{{ post.time }}</span>
             </div>
             
-            <!-- 게시글 내용 -->
+            <!-- 게시글 내용 (투명 테두리 박스) -->
             <div class="post-content" id="content-{{ post.id }}">{{ post.content }}</div>
             
             <!-- 자세히 보기 / 접기 버튼 -->
@@ -110,13 +114,12 @@
     {% endfor %}
 
     <script>
-        // 페이지 로드 시 7줄을 넘어가는 글(말줄임이 발생한 글)에만 버튼을 표시
+        // 7줄을 넘어가는 글에만 버튼을 동적으로 표시
         window.addEventListener('DOMContentLoaded', () => {
             {% for post in posts %}
                 const el = document.getElementById('content-{{ post.id }}');
                 const btn = document.getElementById('btn-{{ post.id }}');
                 if (el && btn) {
-                    // 실제 콘텐츠 높이가 제한 높이보다 크면 7줄을 넘긴 것으로 판단
                     if (el.scrollHeight > el.clientHeight) {
                         btn.style.display = 'inline-block';
                     }
