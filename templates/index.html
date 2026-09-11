@@ -49,9 +49,11 @@
                 <span style="font-size: 0.8em; color: #888;">{{ post.time }}</span>
             </div>
             <p>{{ post.content }}</p>
+            
+            <!-- Supabase 퍼블릭 URL을 활용한 다운로드 링크 -->
             {% if post.filename %}
                 <div class="post-file">
-                    📎 파일: <a href="{{ url_for('downloaded_file', filename=post.filename) }}" download>{{ post.filename }}</a>
+                    📎 파일: <a href="{{ post.file_url }}" download="{{ post.filename }}">{{ post.filename }}</a>
                 </div>
             {% endif %}
 
