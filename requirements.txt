@@ -1,0 +1,4 @@
+Flask==3.0.2
+psycopg2-binary==2.9.10
+supabase==2.3.0
+Werkzeug==3.0.1
