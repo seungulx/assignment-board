@@ -215,6 +215,10 @@ def index():
 # 파일 프록시 다운로드 (모바일/PC 강제 다운로드 처리)
 # =========================================================
 
+# =========================================================
+# 파일 프록시 다운로드 (모바일/PC 강제 다운로드 처리)
+# =========================================================
+
 @app.route('/proxy_download')
 def proxy_download():
     file_url = request.args.get('url')
@@ -223,8 +227,12 @@ def proxy_download():
         return "잘못된 요청입니다.", 400
     
     try:
+        # 원본 파일의 Content-Type을 가져오기 위해 urllib로 먼저 열어봅니다.
+        resp_obj = urllib.request.urlopen(file_url)
+        content_type = resp_obj.headers.get('Content-Type', 'application/octet-stream')
+
         def generate():
-            with urllib.request.urlopen(file_url) as resp:
+            with resp_obj as resp:
                 while True:
                     chunk = resp.read(8192)
                     if not chunk:
@@ -235,7 +243,9 @@ def proxy_download():
         return Response(
             stream_with_context(generate()),
             headers={
-                'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}"
+                'Content-Type': content_type,
+                'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}",
+                'X-Content-Type-Options': 'nosniff'
             }
         )
     except Exception as e:
