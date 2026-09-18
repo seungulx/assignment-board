@@ -1,41 +1,71 @@
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 import urllib.request
 import urllib.parse
 
-from flask import Flask, render_template, request, redirect, url_for, Response, stream_with_context
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    Response,
+    stream_with_context,
+    session
+)
+
 import psycopg2
 from supabase import create_client, Client
 
+
 app = Flask(__name__)
+
+
+# =========================================================
+# Flask 세션 설정
+# =========================================================
+
+app.secret_key = os.environ.get(
+    "FLASK_SECRET_KEY",
+    "change-this-secret-key"
+)
+
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+
 
 # =========================================================
 # Supabase 설정
 # =========================================================
 
 SUPABASE_URL = os.environ.get(
-    "SUPABASE_URL",
-    "https://abytfhtylcsaykczjpgg.supabase.co"
+    "SUPABASE_URL"
 )
 
 SUPABASE_KEY = os.environ.get(
-    "SUPABASE_PUBLISHABLE_KEY",
-    "sb_publishable_GfxJ2pWNAnd55GmHCOjG5w_eHVVyw6a"
+    "SUPABASE_PUBLISHABLE_KEY"
 )
 
 DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "postgresql://postgres.abytfhtylcsaykczjpgg:seunguk0130!@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres"
+    "DATABASE_URL"
 )
 
+
+# =========================================================
 # 관리자 비밀번호
+# 게시글 삭제에 사용
+# =========================================================
+
 ADMIN_PASSWORD = os.environ.get(
     "ADMIN_PASSWORD",
     "1234"
 )
 
+
+# =========================================================
 # Supabase 연결
+# =========================================================
+
 supabase: Client = create_client(
     SUPABASE_URL,
     SUPABASE_KEY
@@ -43,12 +73,25 @@ supabase: Client = create_client(
 
 
 # =========================================================
+# 데이터베이스 연결
+# =========================================================
+
+def get_db_connection():
+    return psycopg2.connect(DATABASE_URL)
+
+
+# =========================================================
 # 데이터베이스 초기화
 # =========================================================
 
 def init_db():
-    conn = psycopg2.connect(DATABASE_URL)
+
+    conn = get_db_connection()
     cursor = conn.cursor()
+
+    # -----------------------------------------------------
+    # 게시글 테이블
+    # -----------------------------------------------------
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS posts (
@@ -63,21 +106,192 @@ def init_db():
         )
     ''')
 
+
+    # -----------------------------------------------------
+    # 사이트 비밀번호 테이블
+    # -----------------------------------------------------
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS site_settings (
+            id INTEGER PRIMARY KEY,
+            site_password TEXT NOT NULL
+        )
+    ''')
+
+
+    # -----------------------------------------------------
+    # 사이트 비밀번호가 아직 없으면 기본값 생성
+    # -----------------------------------------------------
+
+    cursor.execute('''
+        SELECT id
+        FROM site_settings
+        WHERE id = 1
+    ''')
+
+    row = cursor.fetchone()
+
+
+    if not row:
+
+        # Render 환경변수 SITE_PASSWORD가 있으면 사용
+        # 없으면 임시 기본 비밀번호 사용
+        default_password = os.environ.get(
+            "SITE_PASSWORD",
+            "1234"
+        )
+
+        cursor.execute('''
+            INSERT INTO site_settings (
+                id,
+                site_password
+            )
+            VALUES (%s, %s)
+        ''', (
+            1,
+            default_password
+        ))
+
+
     conn.commit()
+
     cursor.close()
     conn.close()
+
+
+# =========================================================
+# 사이트 비밀번호 확인
+# =========================================================
+
+def check_site_password(password):
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        SELECT site_password
+        FROM site_settings
+        WHERE id = 1
+    ''')
+
+    row = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+
+    if row and password == row[0]:
+        return True
+
+    return False
+
+
+# =========================================================
+# 로그인 여부 확인
+# =========================================================
+
+def is_logged_in():
+
+    return session.get(
+        "site_authenticated",
+        False
+    )
+
+
+# =========================================================
+# 로그인 페이지
+# =========================================================
+
+@app.route(
+    '/login',
+    methods=['GET', 'POST']
+)
+def login():
+
+    # 이미 로그인되어 있으면 게시판으로 이동
+    if is_logged_in():
+
+        return redirect(
+            url_for('index')
+        )
+
+
+    # 로그인 시도
+    if request.method == 'POST':
+
+        password = request.form.get(
+            'password',
+            ''
+        )
+
+
+        # 비밀번호 확인
+        if check_site_password(password):
+
+            session.permanent = True
+
+            session[
+                'site_authenticated'
+            ] = True
+
+            return redirect(
+                url_for('index')
+            )
+
+
+        return render_template(
+            'login.html',
+            error='비밀번호가 틀렸습니다.'
+        )
+
+
+    return render_template(
+        'login.html'
+    )
+
+
+# =========================================================
+# 로그아웃
+# =========================================================
+
+@app.route('/logout')
+def logout():
+
+    session.pop(
+        'site_authenticated',
+        None
+    )
+
+    return redirect(
+        url_for('login')
+    )
 
 
 # =========================================================
 # 메인 페이지
 # =========================================================
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route(
+    '/',
+    methods=['GET', 'POST']
+)
 def index():
 
     # -----------------------------------------------------
-    # 게시글 작성
+    # 로그인 확인
     # -----------------------------------------------------
+
+    if not is_logged_in():
+
+        return redirect(
+            url_for('login')
+        )
+
+
+    # =====================================================
+    # 게시글 작성
+    # =====================================================
+
     if request.method == 'POST':
 
         author = request.form.get(
@@ -90,50 +304,77 @@ def index():
             ''
         )
 
-        file = request.files.get('file')
+        file = request.files.get(
+            'file'
+        )
+
 
         filename = ''
         storage_path = ''
         file_url = ''
 
-        # -------------------------------------------------
+
+        # =================================================
         # 파일 업로드
-        # -------------------------------------------------
+        # =================================================
+
         if file and file.filename != '':
 
-            # 사용자가 올린 원래 파일 이름 (화면 표시용)
+            # 사용자가 올린 원래 파일 이름
             filename = file.filename
 
-            # 파일 이름에서 확장자(.png, .jpg, .pdf 등) 추출
-            ext = os.path.splitext(filename)[1]
 
-            # Supabase Storage에는 한글/특수문자 에러가 안 나도록 순수 UUID+확장자로 저장
-            storage_path = f"{uuid.uuid4()}{ext}"
+            # 확장자 추출
+            ext = os.path.splitext(
+                filename
+            )[1]
+
+
+            # Supabase Storage에 저장할 실제 이름
+            storage_path = (
+                f"{uuid.uuid4()}{ext}"
+            )
+
 
             # 파일 읽기
             file_bytes = file.read()
 
+
             # Supabase Storage 업로드
-            supabase.storage.from_('uploads').upload(
+            supabase.storage.from_(
+                'uploads'
+            ).upload(
                 path=storage_path,
                 file=file_bytes,
                 file_options={
-                    "content-type": file.content_type or "application/octet-stream",
+                    "content-type":
+                        file.content_type
+                        or
+                        "application/octet-stream",
+
                     "upsert": "false"
                 }
             )
 
+
             # 공개 URL 생성
-            file_url = supabase.storage.from_(
-                'uploads'
-            ).get_public_url(storage_path)
+            file_url = (
+                supabase
+                .storage
+                .from_('uploads')
+                .get_public_url(
+                    storage_path
+                )
+            )
 
-        # -------------------------------------------------
+
+        # =================================================
         # 게시글 DB 저장
-        # -------------------------------------------------
+        # =================================================
 
-        conn = psycopg2.connect(DATABASE_URL)
+        conn = get_db_connection()
         cursor = conn.cursor()
+
 
         cursor.execute('''
             INSERT INTO posts (
@@ -144,7 +385,14 @@ def index():
                 storage_path,
                 file_url
             )
-            VALUES (%s, %s, %s, %s, %s, %s)
+            VALUES (
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s
+            )
         ''', (
             0,
             author,
@@ -154,19 +402,25 @@ def index():
             file_url
         ))
 
+
         conn.commit()
 
         cursor.close()
         conn.close()
 
-        return redirect(url_for('index'))
 
-    # -----------------------------------------------------
+        return redirect(
+            url_for('index')
+        )
+
+
+    # =====================================================
     # 게시글 가져오기
-    # -----------------------------------------------------
+    # =====================================================
 
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = get_db_connection()
     cursor = conn.cursor()
+
 
     cursor.execute('''
         SELECT
@@ -180,30 +434,46 @@ def index():
         ORDER BY id DESC
     ''')
 
+
     rows = cursor.fetchall()
+
 
     cursor.close()
     conn.close()
 
-    # -----------------------------------------------------
-    # HTML에 전달할 데이터 생성
-    # -----------------------------------------------------
+
+    # =====================================================
+    # HTML에 전달할 데이터
+    # =====================================================
 
     posts = []
+
 
     for r in rows:
 
         posts.append({
+
             'id': r[0],
+
             'author': r[1],
+
             'content': r[2],
+
             'filename': r[3],
+
             'file_url': r[4],
-            # UTC 시간에 9시간을 더해 한국 시간(KST)으로 변환
-            'time': (r[5] + timedelta(hours=9)).strftime(
-                '%Y-%m-%d %H:%M:%S'
-            ) if r[5] else ''
+
+            # UTC → 한국 시간
+            'time':
+                (
+                    r[5] + timedelta(hours=9)
+                ).strftime(
+                    '%Y-%m-%d %H:%M:%S'
+                )
+                if r[5]
+                else ''
         })
+
 
     return render_template(
         'index.html',
@@ -212,104 +482,226 @@ def index():
 
 
 # =========================================================
-# 파일 프록시 다운로드 (모바일/PC 강제 다운로드 처리)
-# =========================================================
-
-# =========================================================
-# 파일 프록시 다운로드 (모바일/PC 강제 다운로드 처리)
+# 파일 다운로드
 # =========================================================
 
 @app.route('/proxy_download')
 def proxy_download():
-    file_url = request.args.get('url')
-    filename = request.args.get('filename', 'download')
+
+    # -----------------------------------------------------
+    # 로그인 확인
+    # -----------------------------------------------------
+
+    if not is_logged_in():
+
+        return redirect(
+            url_for('login')
+        )
+
+
+    file_url = request.args.get(
+        'url'
+    )
+
+    filename = request.args.get(
+        'filename',
+        'download'
+    )
+
+
     if not file_url:
-        return "잘못된 요청입니다.", 400
-    
+
+        return (
+            "잘못된 요청입니다.",
+            400
+        )
+
+
     try:
-        # 원본 파일의 Content-Type을 가져오기 위해 urllib로 먼저 열어봅니다.
-        resp_obj = urllib.request.urlopen(file_url)
-        content_type = resp_obj.headers.get('Content-Type', 'application/octet-stream')
+
+        # 원본 파일 열기
+        resp_obj = urllib.request.urlopen(
+            file_url
+        )
+
+
+        content_type = (
+            resp_obj.headers.get(
+                'Content-Type',
+                'application/octet-stream'
+            )
+        )
+
 
         def generate():
+
             with resp_obj as resp:
+
                 while True:
-                    chunk = resp.read(8192)
+
+                    chunk = resp.read(
+                        8192
+                    )
+
                     if not chunk:
                         break
+
                     yield chunk
-        
-        encoded_filename = urllib.parse.quote(filename)
+
+
+        encoded_filename = (
+            urllib.parse.quote(
+                filename
+            )
+        )
+
+
         return Response(
-            stream_with_context(generate()),
+
+            stream_with_context(
+                generate()
+            ),
+
             headers={
-                'Content-Type': content_type,
-                'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}",
-                'X-Content-Type-Options': 'nosniff'
+
+                'Content-Type':
+                    content_type,
+
+                'Content-Disposition':
+                    f"attachment; "
+                    f"filename*=UTF-8''"
+                    f"{encoded_filename}",
+
+                'X-Content-Type-Options':
+                    'nosniff'
             }
         )
+
+
     except Exception as e:
-        return "파일을 다운로드할 수 없습니다.", 404
+
+        print(
+            "파일 다운로드 오류:",
+            e
+        )
+
+        return (
+            "파일을 다운로드할 수 없습니다.",
+            404
+        )
 
 
 # =========================================================
 # 게시글 삭제
 # =========================================================
 
-@app.route('/delete/<int:post_id>', methods=['POST'])
+@app.route(
+    '/delete/<int:post_id>',
+    methods=['POST']
+)
 def delete_post(post_id):
+
+    # -----------------------------------------------------
+    # 로그인 확인
+    # -----------------------------------------------------
+
+    if not is_logged_in():
+
+        return redirect(
+            url_for('login')
+        )
+
+
+    # -----------------------------------------------------
+    # 삭제 비밀번호 확인
+    # -----------------------------------------------------
 
     input_password = request.form.get(
         'password',
         ''
     )
 
-    # 관리자 비밀번호 확인
-    if input_password != ADMIN_PASSWORD:
-        return redirect(url_for('index'))
 
-    conn = psycopg2.connect(DATABASE_URL)
+    if input_password != ADMIN_PASSWORD:
+
+        return redirect(
+            url_for('index')
+        )
+
+
+    # -----------------------------------------------------
+    # DB 연결
+    # -----------------------------------------------------
+
+    conn = get_db_connection()
     cursor = conn.cursor()
 
-    # 게시글의 실제 Storage 경로 가져오기
+
+    # -----------------------------------------------------
+    # 게시글의 Storage 경로 가져오기
+    # -----------------------------------------------------
+
     cursor.execute('''
         SELECT storage_path
         FROM posts
         WHERE id = %s
-    ''', (post_id,))
+    ''', (
+        post_id,
+    ))
+
 
     row = cursor.fetchone()
+
 
     if row:
 
         storage_path = row[0]
 
+
+        # -------------------------------------------------
         # Supabase Storage 파일 삭제
+        # -------------------------------------------------
+
         if storage_path:
 
             try:
+
                 supabase.storage.from_(
                     'uploads'
-                ).remove([storage_path])
+                ).remove([
+                    storage_path
+                ])
 
             except Exception as e:
+
                 print(
                     "Storage 파일 삭제 오류:",
                     e
                 )
 
+
+        # -------------------------------------------------
         # DB에서 게시글 삭제
+        # -------------------------------------------------
+
         cursor.execute('''
             DELETE FROM posts
             WHERE id = %s
-        ''', (post_id,))
+        ''', (
+            post_id,
+        ))
+
 
         conn.commit()
+
 
     cursor.close()
     conn.close()
 
-    return redirect(url_for('index'))
+
+    return redirect(
+        url_for('index')
+    )
 
 
 # =========================================================
@@ -320,12 +712,14 @@ if __name__ == '__main__':
 
     init_db()
 
+
     port = int(
         os.environ.get(
             'PORT',
             5000
         )
     )
+
 
     app.run(
         host='0.0.0.0',
